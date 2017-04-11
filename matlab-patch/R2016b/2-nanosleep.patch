@@ -1,0 +1,65 @@
+From 32fd31c817a08c3ef22b8284b595878445f1a7dd Mon Sep 17 00:00:00 2001
+From: Martin <prudemar@fel.cvut.cz>
+Date: Mon, 3 Apr 2017 18:09:13 +0200
+Subject: [PATCH] 2-patch-nanosleep
+
+Model sample loop timing modified. Model timing which uses
+'waitForTimerEvent' which subsequently uses 'read' syscall replaced
+by 'clock_nanosleep'. This patch should improve RT capabilities of
+the running code.
+
+Is's recomended to recheck whether model thread is ended correctly
+after quiting the simulation manually
+as there might be some mechanism which is suppressed by this change.
+Nevertheless the author of this patch did not find any problems.
+---
+ .../target/codertarget/rtos/src/linuxinitialize.c  | 26 ++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.c b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
+index f2e90f0..853e937 100644
+--- a/toolbox/target/codertarget/rtos/src/linuxinitialize.c
++++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
+@@ -80,6 +80,31 @@ static void waitForTimerEvent(int fd)
+     }
+ }
+ 
++#define PATCH_NANOSLEEP
++#ifdef PATCH_NANOSLEEP
++#define NSEC_PER_SEC    (1000000000) /* The number of nsecs per sec. */
++void *schedulerTask(void* arg){
++	baseRateInfo_t info = *((baseRateInfo_t *)arg);
++	struct timespec t;
++	int interval = (int)(info.period * NSEC_PER_SEC);
++	printf("**entering patched scheduler task**\n");
++	clock_gettime(CLOCK_MONOTONIC ,&t);
++	while(1){
++		/* wait until next shot */
++		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
++
++		/* do the stuff - post the semaphore */
++		sem_post(&baserateTaskSem);
++
++		/* calculate next shot */
++		t.tv_nsec += interval;
++		while (t.tv_nsec >= NSEC_PER_SEC) {
++			t.tv_nsec -= NSEC_PER_SEC;
++			t.tv_sec++;
++		}
++	}
++}
++#else
+ void *schedulerTask(void* arg)
+ {
+     int fd;
+@@ -95,6 +120,7 @@ void *schedulerTask(void* arg)
+         sem_post(&baserateTaskSem);    
+     }
+ }
++#endif /* PATCH_NANOSLEEP */
+ 
+ /* Should use this fcn, but currently are not using it */
+ /* Why: it is safe ??? from interruption */
+-- 
+1.9.1
+

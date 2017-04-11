@@ -1,0 +1,33 @@
+From 843eef32df5c8627fc93bd8e407f1460bf2c5c1a Mon Sep 17 00:00:00 2001
+From: Martin <prudemar@fel.cvut.cz>
+Date: Mon, 3 Apr 2017 16:46:09 +0200
+Subject: [PATCH] 1-patch-mlockall
+
+Adds mlockall(CURRENT | FUTURE);
+---
+ toolbox/target/codertarget/rtw/codertarget_mainOS.tlc | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc b/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc
+index a9d65a1..5a484dd 100644
+--- a/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc
++++ b/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc
+@@ -124,6 +124,7 @@
+     %if SLibRealNonFinitesRequired()
+         %<SLibIncludeRTnonFiniteHeader()>
+     %endif
++	#include <sys/mman.h>
+     %if EXISTS(EXTMODE)
+         #include "ext_work.h" 
+     %endif
+@@ -739,6 +740,7 @@
+             %if !ISEQUAL(CUSTOMINITIALIZATIONFCNS, 0)
+                %<CUSTOMINITIALIZATIONFCNS[0]>;
+             %endif
++		mlockall(MCL_CURRENT | MCL_FUTURE);
+             %if includeStdIO
+                 printf("**starting the model**\n");      
+                 fflush(stdout);
+-- 
+1.9.1
+
