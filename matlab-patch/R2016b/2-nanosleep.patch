@@ -30,7 +30,7 @@ index f2e90f0..853e937 100644
 +void *schedulerTask(void* arg){
 +	baseRateInfo_t info = *((baseRateInfo_t *)arg);
 +	struct timespec t;
-+	int interval = (int)(info.period * NSEC_PER_SEC);
++	long interval = (long)(info.period * NSEC_PER_SEC);
 +	printf("**entering patched scheduler task**\n");
 +	clock_gettime(CLOCK_MONOTONIC ,&t);
 +	while(1){
@@ -42,7 +42,7 @@ index f2e90f0..853e937 100644
 +
 +		/* calculate next shot */
 +		t.tv_nsec += interval;
-+		while (t.tv_nsec >= NSEC_PER_SEC) {
++		if (t.tv_nsec >= NSEC_PER_SEC) {
 +			t.tv_nsec -= NSEC_PER_SEC;
 +			t.tv_sec++;
 +		}
