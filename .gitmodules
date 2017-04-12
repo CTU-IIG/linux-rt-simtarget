@@ -1,0 +1,3 @@
+[submodule "linux-kernel/rpi/linux"]
+	path = linux-kernel/rpi/linux
+	url = https://github.com/ppisa/linux-rpi.git
