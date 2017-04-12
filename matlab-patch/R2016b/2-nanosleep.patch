@@ -1,6 +1,6 @@
-From 32fd31c817a08c3ef22b8284b595878445f1a7dd Mon Sep 17 00:00:00 2001
+From b1c0c54d0215449d064981050ed6cd1ef3a98223 Mon Sep 17 00:00:00 2001
 From: Martin <prudemar@fel.cvut.cz>
-Date: Mon, 3 Apr 2017 18:09:13 +0200
+Date: Wed, 12 Apr 2017 17:59:49 +0200
 Subject: [PATCH] 2-patch-nanosleep
 
 Model sample loop timing modified. Model timing which uses
@@ -13,14 +13,22 @@ after quiting the simulation manually
 as there might be some mechanism which is suppressed by this change.
 Nevertheless the author of this patch did not find any problems.
 ---
- .../target/codertarget/rtos/src/linuxinitialize.c  | 26 ++++++++++++++++++++++
- 1 file changed, 26 insertions(+)
+ .../target/codertarget/rtos/src/linuxinitialize.c  | 31 +++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
 
 diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.c b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
-index f2e90f0..853e937 100644
+index f2e90f0..4b076eb 100644
 --- a/toolbox/target/codertarget/rtos/src/linuxinitialize.c
 +++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
-@@ -80,6 +80,31 @@ static void waitForTimerEvent(int fd)
+@@ -1,6 +1,6 @@
+ /* Copyright 2013-2016 The MathWorks, Inc. */
+ 
+-
++#include <math.h>
+ /* ---------------------------- */
+ /* RTOS-specific headers        */
+ /* Note: must be included first */
+@@ -80,6 +80,34 @@ static void waitForTimerEvent(int fd)
      }
  }
  
@@ -29,8 +37,10 @@ index f2e90f0..853e937 100644
 +#define NSEC_PER_SEC    (1000000000) /* The number of nsecs per sec. */
 +void *schedulerTask(void* arg){
 +	baseRateInfo_t info = *((baseRateInfo_t *)arg);
-+	struct timespec t;
-+	long interval = (long)(info.period * NSEC_PER_SEC);
++	struct timespec t,interval;
++	interval.tv_sec = (long)floor(info.period);
++	interval.tv_nsec = (long)(NSEC_PER_SEC *
++		(info.period - floor(info.period)));
 +	printf("**entering patched scheduler task**\n");
 +	clock_gettime(CLOCK_MONOTONIC ,&t);
 +	while(1){
@@ -41,7 +51,8 @@ index f2e90f0..853e937 100644
 +		sem_post(&baserateTaskSem);
 +
 +		/* calculate next shot */
-+		t.tv_nsec += interval;
++		t.tv_nsec += interval.tv_nsec;
++		t.tv_sec += interval.tv_sec;
 +		if (t.tv_nsec >= NSEC_PER_SEC) {
 +			t.tv_nsec -= NSEC_PER_SEC;
 +			t.tv_sec++;
@@ -52,7 +63,7 @@ index f2e90f0..853e937 100644
  void *schedulerTask(void* arg)
  {
      int fd;
-@@ -95,6 +120,7 @@ void *schedulerTask(void* arg)
+@@ -95,6 +123,7 @@ void *schedulerTask(void* arg)
          sem_post(&baserateTaskSem);    
      }
  }
