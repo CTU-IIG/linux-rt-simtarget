@@ -1,6 +1,6 @@
-From b1c0c54d0215449d064981050ed6cd1ef3a98223 Mon Sep 17 00:00:00 2001
+From 7698472e3166c179126da42f977c44b883733ca1 Mon Sep 17 00:00:00 2001
 From: Martin <prudemar@fel.cvut.cz>
-Date: Wed, 12 Apr 2017 17:59:49 +0200
+Date: Thu, 20 Apr 2017 11:51:44 +0200
 Subject: [PATCH] 2-patch-nanosleep
 
 Model sample loop timing modified. Model timing which uses
@@ -8,32 +8,30 @@ Model sample loop timing modified. Model timing which uses
 by 'clock_nanosleep'. This patch should improve RT capabilities of
 the running code.
 
+Both C and CPP sourcefiles were modified as it is not obvious when
+each of the iplementations is used.
+
 Is's recomended to recheck whether model thread is ended correctly
 after quiting the simulation manually
 as there might be some mechanism which is suppressed by this change.
-Nevertheless the author of this patch did not find any problems.
+Nevertheless the author of this patch have not encountered any
+problems.
 ---
- .../target/codertarget/rtos/src/linuxinitialize.c  | 31 +++++++++++++++++++++-
- 1 file changed, 30 insertions(+), 1 deletion(-)
+ .../target/codertarget/rtos/src/linuxinitialize.c  | 30 ++++++++++++++++++++++
+ .../codertarget/rtos/src/linuxinitialize.cpp       | 30 ++++++++++++++++++++++
+ 2 files changed, 60 insertions(+)
 
 diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.c b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
-index f2e90f0..4b076eb 100644
+index f2e90f0..1c5a27a 100644
 --- a/toolbox/target/codertarget/rtos/src/linuxinitialize.c
 +++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
-@@ -1,6 +1,6 @@
- /* Copyright 2013-2016 The MathWorks, Inc. */
- 
--
-+#include <math.h>
- /* ---------------------------- */
- /* RTOS-specific headers        */
- /* Note: must be included first */
-@@ -80,6 +80,34 @@ static void waitForTimerEvent(int fd)
+@@ -80,6 +80,35 @@ static void waitForTimerEvent(int fd)
      }
  }
  
 +#define PATCH_NANOSLEEP
 +#ifdef PATCH_NANOSLEEP
++#include <math.h>
 +#define NSEC_PER_SEC    (1000000000) /* The number of nsecs per sec. */
 +void *schedulerTask(void* arg){
 +	baseRateInfo_t info = *((baseRateInfo_t *)arg);
@@ -63,7 +61,55 @@ index f2e90f0..4b076eb 100644
  void *schedulerTask(void* arg)
  {
      int fd;
-@@ -95,6 +123,7 @@ void *schedulerTask(void* arg)
+@@ -95,6 +124,7 @@ void *schedulerTask(void* arg)
+         sem_post(&baserateTaskSem);    
+     }
+ }
++#endif /* PATCH_NANOSLEEP */
+ 
+ /* Should use this fcn, but currently are not using it */
+ /* Why: it is safe ??? from interruption */
+diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp b/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
+index cc78806..cdd9fb3 100644
+--- a/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
++++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
+@@ -80,6 +80,35 @@ static void waitForTimerEvent(int fd)
+     }
+ }
+ 
++#define PATCH_NANOSLEEP
++#ifdef PATCH_NANOSLEEP
++#include <math.h>
++#define NSEC_PER_SEC    (1000000000) /* The number of nsecs per sec. */
++void *schedulerTask(void* arg){
++       baseRateInfo_t info = *((baseRateInfo_t *)arg);
++       struct timespec t,interval;
++       interval.tv_sec = (long)floor(info.period);
++       interval.tv_nsec = (long)(NSEC_PER_SEC *
++               (info.period - floor(info.period)));
++       printf("**entering patched scheduler task**\n");
++       clock_gettime(CLOCK_MONOTONIC ,&t);
++       while(1){
++               /* wait until next shot */
++               clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
++
++               /* do the stuff - post the semaphore */
++               sem_post(&baserateTaskSem);
++
++               /* calculate next shot */
++               t.tv_nsec += interval.tv_nsec;
++               t.tv_sec += interval.tv_sec;
++               if (t.tv_nsec >= NSEC_PER_SEC) {
++                       t.tv_nsec -= NSEC_PER_SEC;
++                       t.tv_sec++;
++               }
++       }
++}
++#else
+ void *schedulerTask(void* arg)
+ {
+     int fd;
+@@ -95,6 +124,7 @@ void *schedulerTask(void* arg)
          sem_post(&baserateTaskSem);    
      }
  }

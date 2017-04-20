@@ -1,33 +1,113 @@
-From 843eef32df5c8627fc93bd8e407f1460bf2c5c1a Mon Sep 17 00:00:00 2001
+From 2a5c3752df800460ea05e543288af4aadebd62bf Mon Sep 17 00:00:00 2001
 From: Martin <prudemar@fel.cvut.cz>
-Date: Mon, 3 Apr 2017 16:46:09 +0200
+Date: Thu, 20 Apr 2017 16:44:19 +0200
 Subject: [PATCH] 1-patch-mlockall
 
-Adds mlockall(CURRENT | FUTURE);
----
- toolbox/target/codertarget/rtw/codertarget_mainOS.tlc | 2 ++
- 1 file changed, 2 insertions(+)
+Added 'mlockall' directive to the linux inicialization file
+to improve RT-behaviour.
+This system call ensures that no memory page of the
+program code is swapped of to a secondary memory.
+Such an action would result in latency up to few milliseconds.
 
-diff --git a/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc b/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc
-index a9d65a1..5a484dd 100644
---- a/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc
-+++ b/toolbox/target/codertarget/rtw/codertarget_mainOS.tlc
-@@ -124,6 +124,7 @@
-     %if SLibRealNonFinitesRequired()
-         %<SLibIncludeRTnonFiniteHeader()>
-     %endif
-+	#include <sys/mman.h>
-     %if EXISTS(EXTMODE)
-         #include "ext_work.h" 
-     %endif
-@@ -739,6 +740,7 @@
-             %if !ISEQUAL(CUSTOMINITIALIZATIONFCNS, 0)
-                %<CUSTOMINITIALIZATIONFCNS[0]>;
-             %endif
+Both C and CPP sourcefiles were modified as it is not obvious when
+each of the iplementations is used.
+---
+ .../target/codertarget/rtos/src/linuxinitialize.c  | 22 ++++++++++++++++++++++
+ .../codertarget/rtos/src/linuxinitialize.cpp       | 22 ++++++++++++++++++++++
+ 2 files changed, 44 insertions(+)
+
+diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.c b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
+index f2e90f0..137cc73 100644
+--- a/toolbox/target/codertarget/rtos/src/linuxinitialize.c
++++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
+@@ -1,5 +1,14 @@
+ /* Copyright 2013-2016 The MathWorks, Inc. */
+ 
++/*
++ * Enhancements to atchieve bounded latencies execution
++ * under fully preemptive Linux kernel
++ * Copyright 2017 Martin Prudek, Czech Technical University
++ * Ideas based on the project
++ * Embedded real-time system target file for Linux OS.
++ * by Michal Sojka, Czech Technical University
++ * https://github.com/CTU-IIG
++ */
+ 
+ /* ---------------------------- */
+ /* RTOS-specific headers        */
+@@ -12,6 +21,15 @@
+ /* ---------------------------- */
+ #include "MW_custom_RTOS_header.h"
+ 
++/*
++ * Mlockall checks & includes
++ */
++#if defined(_POSIX_MEMLOCK)
++       #include <sys/mman.h>
++#else
++       #warning mlockall is not available (!_POSIX_MEMLOCK)
++#endif
++
+ /* ---------------------------- */
+ /* RTOS-specific declarations   */
+ /* ---------------------------- */
+@@ -170,6 +188,10 @@ void myRTOSInit(double baseRatePeriod, int numSubrates)
+     unsigned long cpuMask = 0x1;
+     unsigned int len = sizeof(cpuMask);    
+ 
++	#if defined(_POSIX_MEMLOCK)
 +		mlockall(MCL_CURRENT | MCL_FUTURE);
-             %if includeStdIO
-                 printf("**starting the model**\n");      
-                 fflush(stdout);
++	#endif
++
+     UNUSED(baseRatePeriod);
+     UNUSED(numSubrates);
+     
+diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp b/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
+index cc78806..f5f60a3 100644
+--- a/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
++++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
+@@ -1,5 +1,14 @@
+ /* Copyright 2013-2016 The MathWorks, Inc. */
+ 
++/*
++ * Enhancements to atchieve bounded latencies execution
++ * under fully preemptive Linux kernel
++ * Copyright 2017 Martin Prudek, Czech Technical University
++ * Ideas based on the project
++ * Embedded real-time system target file for Linux OS.
++ * by Michal Sojka, Czech Technical University
++ * https://github.com/CTU-IIG
++ */
+ 
+ /* ---------------------------- */
+ /* RTOS-specific headers        */
+@@ -12,6 +21,15 @@
+ /* ---------------------------- */
+ #include "MW_custom_RTOS_header.h"
+ 
++/*
++ * Mlockall checks & includes
++ */
++#if defined(_POSIX_MEMLOCK)
++       #include <sys/mman.h>
++#else
++       #warning mlockall is not available (!_POSIX_MEMLOCK)
++#endif
++
+ /* ---------------------------- */
+ /* RTOS-specific declarations   */
+ /* ---------------------------- */
+@@ -170,6 +188,10 @@ void myRTOSInit(double baseRatePeriod, int numSubrates)
+     unsigned long cpuMask = 0x1;
+     unsigned int len = sizeof(cpuMask);
+ 
++	#if defined(_POSIX_MEMLOCK)
++		mlockall(MCL_CURRENT | MCL_FUTURE);
++	#endif
++
+     UNUSED(baseRatePeriod);
+     UNUSED(numSubrates);
+     
 -- 
 1.9.1
 
