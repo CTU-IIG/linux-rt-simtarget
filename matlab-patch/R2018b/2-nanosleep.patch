@@ -1,0 +1,219 @@
+From 7698472e3166c179126da42f977c44b883733ca1 Mon Sep 17 00:00:00 2001
+From: Martin <prudemar@fel.cvut.cz>
+Date: Thu, 20 Apr 2017 11:51:44 +0200
+Subject: [PATCH] 2-patch-nanosleep
+
+Model sample loop timing modified. Model timing which uses
+'waitForTimerEvent' which subsequently uses 'read' syscall replaced
+by 'clock_nanosleep'. This patch should improve RT capabilities of
+the running code.
+
+Both C and CPP sourcefiles were modified as it is not obvious when
+each of the iplementations is used.
+
+Is's recomended to recheck whether model thread is ended correctly
+after quiting the simulation manually
+as there might be some mechanism which is suppressed by this change.
+Nevertheless the author of this patch have not encountered any
+problems.
+---
+ .../target/codertarget/rtos/src/linuxinitialize.c  | 30 ++++++++++++++++++++++
+ .../codertarget/rtos/src/linuxinitialize.cpp       | 30 ++++++++++++++++++++++
+ 2 files changed, 60 insertions(+)
+
+diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.c b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
+index f2e90f0..1c5a27a 100644
+--- a/toolbox/target/codertarget/rtos/src/linuxinitialize.c
++++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.c
+@@ -208,6 +208,49 @@
+ /* Internally visible functions */
+ /* ---------------------------- */
+ 
++#define PATCH_NANOSLEEP
++#ifdef PATCH_NANOSLEEP
++#include <math.h>
++#define NSEC_PER_SEC    (1000000000) /* The number of nsecs per sec. */
++void *schedulerTask(void* arg){
++	baseRateInfo_t info = *((baseRateInfo_t *)arg);
++	struct timespec t,interval;
++	interval.tv_sec = (long)floor(info.period);
++	interval.tv_nsec = (long)(NSEC_PER_SEC *
++		(info.period - floor(info.period)));
++	printf("**entering patched scheduler task**\n");
++    MW_DEBUG_LOG("schedulerTask entered\n");
++
++	clock_gettime(CLOCK_MONOTONIC ,&t);
++    sem_post(&baserateTaskSem);
++
++    #if (MW_NUMBER_TIMER_DRIVEN_TASKS > 0) 
++        /* Wait until ALL unarmed timers been created. */
++        for (i=0; i < MW_NUMBER_TIMER_DRIVEN_TASKS; i++) {
++            status = sem_wait(&timerTaskSem[i]);
++            CHECK_STATUS(status, 0, "sem_wait:timerTaskSem");
++            mw_ArmTimer(i);
++        }       
++    #endif    
++
++	while(1){
++		/* wait until next shot */
++		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
++
++		/* do the stuff - post the semaphore */
++		sem_post(&baserateTaskSem);
++
++		/* calculate next shot */
++		t.tv_nsec += interval.tv_nsec;
++		t.tv_sec += interval.tv_sec;
++		if (t.tv_nsec >= NSEC_PER_SEC) {
++			t.tv_nsec -= NSEC_PER_SEC;
++			t.tv_sec++;
++		}
++	}
++}
++#else /* PATCH_NANOSLEEP */
++
+ #ifdef DETECT_OVERRUNS
+ #ifdef MW_DROP_OVERRAN_BASE_RATE 
+ /* Detection and drop */
+@@ -242,7 +285,7 @@
+         }
+     }
+ }
+-#else
++#else /* MW_DROP_OVERRAN_BASE_RATE */
+ /* Detection and catchup */
+ void *schedulerTask(void* arg)
+ {
+@@ -283,8 +326,8 @@
+         #endif
+     }
+ }
+-#endif
+-#else
++#endif /* MW_DROP_OVERRAN_BASE_RATE */
++#else /* DETECT_OVERRUNS */
+ /* No detection */
+ void *schedulerTask(void* arg)
+ {
+@@ -310,7 +353,9 @@
+         sem_post(&baserateTaskSem); 
+     }
+ }
+-#endif
++#endif /* DETECT_OVERRUNS */
++
++#endif /* PATCH_NANOSLEEP */
+ 
+ #if defined(MW_SOC_ENABLED) && defined(MW_KERNEL_PROFILING_ON)
+ void *baserateTaskMonitorFcn(void* arg)
+@@ -526,7 +571,7 @@
+     
+     UNUSED(baseRatePeriod);
+     UNUSED(numSubrates);
+-
++    
+ #if defined(_POSIX_MEMLOCK)
+ 	mlockall(MCL_CURRENT | MCL_FUTURE);
+ #endif
+diff --git a/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp b/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
+index cc78806..cdd9fb3 100644
+--- a/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
++++ b/toolbox/target/codertarget/rtos/src/linuxinitialize.cpp
+@@ -208,6 +208,49 @@
+ /* Internally visible functions */
+ /* ---------------------------- */
+ 
++#define PATCH_NANOSLEEP
++#ifdef PATCH_NANOSLEEP
++#include <math.h>
++#define NSEC_PER_SEC    (1000000000) /* The number of nsecs per sec. */
++void *schedulerTask(void* arg){
++	baseRateInfo_t info = *((baseRateInfo_t *)arg);
++	struct timespec t,interval;
++	interval.tv_sec = (long)floor(info.period);
++	interval.tv_nsec = (long)(NSEC_PER_SEC *
++		(info.period - floor(info.period)));
++	printf("**entering patched scheduler task**\n");
++    MW_DEBUG_LOG("schedulerTask entered\n");
++
++	clock_gettime(CLOCK_MONOTONIC ,&t);
++    sem_post(&baserateTaskSem);
++
++    #if (MW_NUMBER_TIMER_DRIVEN_TASKS > 0) 
++        /* Wait until ALL unarmed timers been created. */
++        for (i=0; i < MW_NUMBER_TIMER_DRIVEN_TASKS; i++) {
++            status = sem_wait(&timerTaskSem[i]);
++            CHECK_STATUS(status, 0, "sem_wait:timerTaskSem");
++            mw_ArmTimer(i);
++        }       
++    #endif    
++
++	while(1){
++		/* wait until next shot */
++		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
++
++		/* do the stuff - post the semaphore */
++		sem_post(&baserateTaskSem);
++
++		/* calculate next shot */
++		t.tv_nsec += interval.tv_nsec;
++		t.tv_sec += interval.tv_sec;
++		if (t.tv_nsec >= NSEC_PER_SEC) {
++			t.tv_nsec -= NSEC_PER_SEC;
++			t.tv_sec++;
++		}
++	}
++}
++#else /* PATCH_NANOSLEEP */
++
+ #ifdef DETECT_OVERRUNS
+ #ifdef MW_DROP_OVERRAN_BASE_RATE 
+ /* Detection and drop */
+@@ -242,7 +285,7 @@
+         }
+     }
+         }
+-#else
++#else /* MW_DROP_OVERRAN_BASE_RATE */
+ /* Detection and catchup */
+ void *schedulerTask(void* arg)
+ {
+@@ -283,8 +326,8 @@
+         #endif
+     }
+ }
+-#endif
+-#else        
++#endif /* MW_DROP_OVERRAN_BASE_RATE */
++#else /* DETECT_OVERRUNS */        
+ /* No detection */
+ void *schedulerTask(void* arg)
+ {
+@@ -310,7 +353,9 @@
+         sem_post(&baserateTaskSem);  
+     }
+ }
+-#endif
++#endif /* DETECT_OVERRUNS */
++
++#endif /* PATCH_NANOSLEEP */
+ 
+ #if defined(MW_SOC_ENABLED) && defined(MW_KERNEL_PROFILING_ON)
+ void *baserateTaskMonitorFcn(void* arg)
+@@ -526,11 +571,11 @@
+     
+     UNUSED(baseRatePeriod);
+     UNUSED(numSubrates);
+-
++    
+ #if defined(_POSIX_MEMLOCK)
+ 	mlockall(MCL_CURRENT | MCL_FUTURE);
+ #endif
+-        
++    
+     if (!MW_IS_CONCURRENT) {
+         /* All threads created by this process will run on a single CPU */
+         status = sched_setaffinity(0, len, (cpu_set_t *) &cpuMask);
+-- 
+1.9.1
+
