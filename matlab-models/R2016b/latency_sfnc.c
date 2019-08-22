@@ -102,7 +102,8 @@ void * log_loop(void* param){
 	pthread_attr_t 		log_attr;
 	struct sched_param 	log_sched_param;
 	int 				log_sched_policy;
-	
+
+#ifndef _WIN32
 	log_thread_id=pthread_self();
 	pthread_getattr_np(log_thread_id, &log_attr);
 	
@@ -123,10 +124,8 @@ void * log_loop(void* param){
 		default:
 			fprintf(f,"#log_sched_policy: unknown\n");
 	}
-	
-	
-	
-	
+#endif /*_WIN32*/
+
 		while(1){
 			sem_wait(&sem);
 			fprintf(f, "%u %ld\n", (unsigned)times[saved_time_index].tv_sec, (long)(times[saved_time_index].tv_nsec));
@@ -192,7 +191,9 @@ void mdlStart(SimStruct *S){
 	
 	fprintf(f, "%s", "#LOG_DATA_V1\n");
 	fprintf(f,"#this_process_ID: %d\n", getpid());
+#ifndef _WIN32
 	fprintf(f,"#parents_ID: %d\n", getppid());
+#endif /*_WIN32*/
 	
 	fp = popen("uname -a", "r");
 	while (fgets(data,sizeof(data),fp)){
@@ -202,9 +203,10 @@ void mdlStart(SimStruct *S){
 	while (fgets(data,sizeof(data),fp)){
 		fprintf(f,"#date: %s",data);
 	}
-	
+
 	pclose(fp);
-	
+
+#ifndef _WIN32
 	base_thread_id=pthread_self();
 	pthread_getattr_np(base_thread_id, &this_attr);
 	
@@ -227,6 +229,7 @@ void mdlStart(SimStruct *S){
 	}
 	
 	sem_init(&sem,THREAD_SHARED,0);
+#endif /*_WIN32*/
 	create_rt_task(&base_thread_id,PRIOR_LOW,log_loop,NULL);
 	clock_gettime(CLOCK_MONOTONIC, &prev);
 }
